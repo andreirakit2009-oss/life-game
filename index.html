@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>1 из 8 миллиардов</title>
+    <!-- Подключаем Telegram Web App API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; padding: 15px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .card {
+            background: #2a2a2a; border-radius: 15px; padding: 20px;
+            width: 100%; max-width: 400px; box-sizing: border-box;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+        .stat-bar { background: #444; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; margin-top: 4px;}
+        .stat-fill { height: 100%; transition: width 0.3s; }
+        .health .stat-fill { background: #ff4d4d; }
+        .happiness .stat-fill { background: #ffcc00; }
+        .knowledge .stat-fill { background: #4da6ff; }
+        .relations .stat-fill { background: #66ff66; }
+        .income { color: #00ffcc; font-weight: bold; }
+        
+        .btn {
+            background: #007bff; color: white; border: none; padding: 12px;
+            border-radius: 10px; font-size: 16px; width: 100%; margin-top: 10px;
+            cursor: pointer; transition: 0.2s;
+        }
+        .btn:active { background: #0056b3; }
+        .btn-focus { background: #6c757d; }
+        .btn-choice { background: #28a745; margin-top: 5px; }
+        
+        .log { margin-top: 20px; font-size: 12px; color: #aaa; max-height: 150px; overflow-y: auto; }
+        .log p { margin: 4px 0; border-bottom: 1px solid #333; padding-bottom: 4px;}
+        h2 { margin: 0 0 15px 0; font-size: 18px; text-align: center; }
+        .country { font-size: 14px; color: #bbb; text-align: center; margin-bottom: 15px; }
+        
+        /* Скрытые блоки */
+        #choices-block { display: none; margin-top: 15px; }
+        .choice-title { font-size: 16px; color: #ffd700; text-align: center; margin-bottom: 10px;}
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2 id="char-name">Имя</h2>
+        <div class="country" id="char-country">Страна, Возраст</div>
+        
+        <div class="stat-row"><span>❤️ Здоровье</span> <span id="val-health">0</span></div>
+        <div class="stat-bar health"><div class="stat-fill" id="bar-health"></div></div>
+
+        <div class="stat-row" style="margin-top:10px"><span>😊 Счастье</span> <span id="val-happiness">0</span></div>
+        <div class="stat-bar happiness"><div class="stat-fill" id="bar-happiness"></div></div>
+
+        <div class="stat-row" style="margin-top:10px"><span>📚 Знания</span> <span id="val-knowledge">0</span></div>
+        <div class="stat-bar knowledge"><div class="stat-fill" id="bar-knowledge"></div></div>
+
+        <div class="stat-row" style="margin-top:10px"><span>🤝 Отношения</span> <span id="val-relations">0</span></div>
+        <div class="stat-bar relations"><div class="stat-fill" id="bar-relations"></div></div>
+
+        <div class="stat-row" style="margin-top:15px; font-size: 16px;">
+            <span>💰 Доход:</span> <span class="income" id="val-income">0 $/год</span>
+        </div>
+        <div class="stat-row">
+            <span>🎯 Фокус:</span> <span id="val-focus">Баланс</span>
+        </div>
+
+        <!-- Блок развилки (выбор) -->
+        <div id="choices-block">
+            <div class="choice-title" id="choice-title">Развилка</div>
+            <div id="choice-options"></div>
+        </div>
+
+        <!-- Кнопки управления -->
+        <div id="controls">
+            <button class="btn btn-focus" onclick="changeFocus()">🎯 Сменить фокус</button>
+            <button class="btn" onclick="stepYear()">▶️ Прожить год</button>
+            <button class="btn btn-focus" onclick="autoMode()">⏹ Авторежим (30 лет)</button>
+        </div>
+        
+        <!-- Кнопка "Новая жизнь" -->
+        <button class="btn" id="btn-new" style="display:none; background:#17a2b8;" onclick="newLife()">🔄 Новая жизнь</button>
+
+        <div class="log" id="log-container"></div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+        tg.setHeaderColor('#1a1a1a');
+        
+        // Данные игрока
+        let life = {};
+        
+        // Причины смерти
+        const causes = ["остановка сердца", "инсульт", "болезнь", "несчастный случай", "старость"];
+        
+        function newLife() {
+            const names = ["Алекс", "Мария", "Джон", "Айгуль", "Ли", "Иван", "София"];
+            life = {
+                name: names[Math.floor(Math.random() * names.length)],
+                country: "Россия", // Для упрощения, можно брать случайную
+                age: 0,
+                health: 80, happiness: 60, knowledge: 10, relations: 60,
+                income: 0, focus: "Баланс", alive: true,
+                isWorking: false,
+                log: [],
+                pendingChoice: null, options: []
+            };
+            document.getElementById('btn-new').style.display = 'none';
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('choices-block').style.display = 'none';
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('char-name').innerText = life.name;
+            document.getElementById('char-country').innerText = `${life.country} · ${life.age} лет`;
+            
+            document.getElementById('val-health').innerText = Math.floor(life.health);
+            document.getElementById('bar-health').style.width = `${life.health}%`;
+            
+            document.getElementById('val-happiness').innerText = Math.floor(life.happiness);
+            document.getElementById('bar-happiness').style.width = `${life.happiness}%`;
+            
+            document.getElementById('val-knowledge').innerText = Math.floor(life.knowledge);
+            document.getElementById('bar-knowledge').style.width = `${life.knowledge}%`;
+            
+            document.getElementById('val-relations').innerText = Math.floor(life.relations);
+            document.getElementById('bar-relations').style.width = `${life.relations}%`;
+            
+            document.getElementById('val-income').innerText = `${life.income} $/год`;
+            document.getElementById('val-focus').innerText = life.focus;
+            
+            // Логи
+            const logHtml = life.log.slice(-8).map(l => `<p>${l}</p>`).join('');
+            document.getElementById('log-container').innerHTML = logHtml;
+            
+            // Проверка развилки
+            if (life.pendingChoice) {
+                showChoices(life.pendingChoice, life.options);
+            }
+            
+            // Если мертв
+            if (!life.alive) {
+                document.getElementById('controls').style.display = 'none';
+                document.getElementById('choices-block').style.display = 'none';
+                document.getElementById('btn-new').style.display = 'block';
+                document.getElementById('char-country').innerText = `${life.country} · Умер в ${life.age} лет`;
+            }
+        }
+
+        function changeFocus() {
+            if (!life.alive) return;
+            let f = prompt("Выберите фокус: Здоровье, Учёба, Отношения, Работа, Баланс");
+            if (["Здоровье", "Учёба", "Отношения", "Работа", "Баланс"].includes(f)) {
+                life.focus = f;
+                life.log.push(`Выбран фокус: ${f}`);
+                updateUI();
+            }
+        }
+
+        function stepYear() {
+            if (!life.alive) return;
+            
+            life.age++;
+            
+            // Логика фокуса
+            if (life.focus === "Здоровье") life.health += 2;
+            if (life.focus === "Учёба" && life.age >= 6 && life.age <= 22) life.knowledge += 3;
+            if (life.focus === "Отношения") life.relations += 2;
+
+            // Естественная убыль здоровья
+            let decay = life.age < 40 ? 0.5 : life.age < 65 ? 1 : 2;
+            life.health = Math.max(0, Math.min(100, life.health - decay + (Math.random() - 0.5)));
+            
+            // Доход (только если работает и возраст >= 16)
+            if (life.isWorking && life.age >= 16) {
+                life.income = Math.floor(life.income * 1.05 + 500);
+            } else {
+                life.income = 0;
+            }
+
+            // Случайные события
+            if (Math.random() < 0.15) {
+                let ev = "Скучный год";
+                if (life.age < 18) ev = "Играл с друзьями";
+                else if (life.age < 60) ev = Math.random() > 0.5 ? "Получил премию" : "Поругался с начальником";
+                else ev = "Читал газеты";
+                
+                if (ev === "Получил премию") { life.income += 1000; life.happiness += 5; }
+                life.log.push(`${life.age} лет: ${ev}`);
+            }
+
+            // Проверка смерти
+            if (Math.random() < 0.01 + (life.age > 60 ? 0.05 : 0)) {
+                life.alive = false;
+                let c = causes[Math.floor(Math.random() * causes.length)];
+                life.log.push(`💀 Умер в ${life.age} лет. Причина: ${c}`);
+            }
+            
+            // Развилки
+            if (life.alive) {
+                checkChoices();
+            }
+            
+            updateUI();
+        }
+
+        function checkChoices() {
+            life.pendingChoice = null;
+            if (life.age === 6) { life.pendingChoice = "Учёба"; life.options = ["Усердно учиться", "Больше играть", "Помогать семье"]; }
+            else if (life.age === 17) { life.pendingChoice = "После школы"; life.options = ["Университет", "Пойти работать", "Колледж"]; }
+            else if (life.age === 22 && !life.isWorking) { life.pendingChoice = "Работа"; life.options = ["Искать хорошую работу", "Начать бизнес"]; }
+        }
+
+        function showChoices(title, opts) {
+            document.getElementById('controls').style.display = 'none';
+            document.getElementById('choices-block').style.display = 'block';
+            document.getElementById('choice-title').innerText = `⚡ Развилка: ${title}`;
+            
+            let html = "";
+            opts.forEach((opt, index) => {
+                html += `<button class="btn btn-choice" onclick="makeChoice(${index})">${opt}</button>`;
+            });
+            document.getElementById('choice-options').innerHTML = html;
+        }
+
+        function makeChoice(idx) {
+            let opt = life.options[idx];
+            life.log.push(`Выбор: ${opt}`);
+            
+            if (opt === "Университет") { life.knowledge += 20; }
+            if (opt === "Пойти работать" || opt === "Искать хорошую работу") { 
+                life.isWorking = true; life.income = 3000; life.job = "рабочий";
+            }
+            if (opt === "Начать бизнес") { life.isWorking = true; life.income = 5000; }
+            
+            life.pendingChoice = null;
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('choices-block').style.display = 'none';
+            updateUI();
+        }
+
+        function autoMode() {
+            if (!life.alive) return;
+            for (let i = 0; i < 30; i++) {
+                if (!life.alive || life.pendingChoice) break;
+                stepYear();
+            }
+            updateUI();
+        }
+
+        // Старт игры при загрузке
+        newLife();
+    </script>
+</body>
+</html>
