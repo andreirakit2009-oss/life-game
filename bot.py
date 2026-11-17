@@ -13,8 +13,6 @@ APP_URL = "https://andreirakit2009-oss.github.io/life-game/index.html"
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Если бот не подключается без VPN, раскомментируйте строку ниже
-# PROXY_URL = "socks5://127.0.0.1:10808"
 PROXY_URL = None
 
 if PROXY_URL:
@@ -49,9 +47,7 @@ def run_health_check():
     server.serve_forever()
 
 async def main():
-    # Запускаем веб-сервер в отдельном потоке, чтобы он не блокировал бота
     threading.Thread(target=run_health_check, daemon=True).start()
-    
     print("Бот запускается... Ожидание команды /start...")
     await dp.start_polling(bot)
 
