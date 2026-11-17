@@ -8,7 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.session.aiohttp import AiohttpSession
 
 # Ссылка на вашу игру на GitHub Pages
-APP_URL = "https://andreirakit2009-oss.github.io/life-game/index.html"
+APP_URL = "https://andreirakit2009-oss.github.io/life-game/index.html?v=6"
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
