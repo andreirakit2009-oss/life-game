@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>1 из 8 миллиардов</title>
-    <!-- Подключаем Telegram Web App API -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
@@ -27,6 +26,8 @@
         .knowledge .stat-fill { background: #4da6ff; }
         .relations .stat-fill { background: #66ff66; }
         .income { color: #00ffcc; font-weight: bold; }
+        .money { color: #00ffcc; font-weight: bold; }
+        .debt { color: #ff4d4d; font-weight: bold; }
         
         .btn {
             background: #007bff; color: white; border: none; padding: 12px;
@@ -34,11 +35,8 @@
             cursor: pointer; transition: 0.2s; font-weight: 500;
         }
         .btn:active { opacity: 0.7; }
-        
-        /* Контейнер для кнопок скорости */
         .speed-controls { display: flex; gap: 8px; margin-top: 12px; }
         .speed-controls .btn { margin-top: 0; padding: 10px; font-size: 14px; }
-        
         .btn-focus { background: #6c757d; }
         .btn-choice { background: #28a745; margin-top: 8px; font-size: 16px; }
         
@@ -50,10 +48,7 @@
         
         #choices-block { display: none; margin-top: 15px; }
         .choice-title { font-size: 16px; color: #ffd700; text-align: center; margin-bottom: 10px;}
-        
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #222; }
-        ::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+        .family-info { font-size: 13px; color: #ddd; margin-top: 10px; text-align: center; border-top: 1px solid #444; padding-top: 10px;}
     </style>
 </head>
 <body>
@@ -77,274 +72,24 @@
         <div class="stat-row" style="margin-top:15px; font-size: 16px;">
             <span>💰 Доход:</span> <span class="income" id="val-income">0 $/год</span>
         </div>
+        
+        <div class="stat-row" style="margin-top:5px; font-size: 16px;">
+            <span>💵 Баланс:</span> <span class="money" id="val-money">0 $</span>
+        </div>
+        <div id="debt-row" class="stat-row" style="display:none; font-size: 14px;">
+            <span>📉 Долг:</span> <span class="debt" id="val-debt">0 $</span>
+        </div>
+        
         <div class="stat-row">
             <span>🎯 Фокус:</span> <span id="val-focus">Баланс</span>
         </div>
 
-        <!-- Блок развилки (выбор) -->
+        <div id="family-block" class="family-info" style="display:none;"></div>
+
         <div id="choices-block">
             <div class="choice-title" id="choice-title">Развилка</div>
             <div id="choice-options"></div>
         </div>
 
-        <!-- Блок управления (скрывается на развилках) -->
         <div id="controls">
-            <button class="btn btn-focus" onclick="changeFocus()">🎯 Сменить фокус</button>
-            
-            <div class="speed-controls">
-                <button class="btn" id="btn-play" onclick="togglePlay()" style="background: #dc3545; flex: 1;">⏸️ Пауза</button>
-                <button class="btn" id="btn-spd1" onclick="setSpeed(2000)" style="background: #28a745; flex: 1;">▶️ x1</button>
-                <button class="btn" id="btn-spd5" onclick="setSpeed(400)" style="background: #007bff; flex: 1;">⏩ x5</button>
-                <button class="btn" id="btn-spd20" onclick="setSpeed(100)" style="background: #6f42c1; flex: 1;">⏭️ x20</button>
-            </div>
-        </div>
-        
-        <!-- Кнопка "Новая жизнь" -->
-        <button class="btn" id="btn-new" style="display:none; background:#17a2b8; margin-top: 15px;" onclick="newLife()">🔄 Новая жизнь</button>
-
-        <div class="log" id="log-container"></div>
-    </div>
-
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.setHeaderColor('#1a1a1a');
-        
-        let life = {};
-        let gameInterval = null; 
-        let currentSpeed = 2000; // Начинаем с 1 года = 2 сек
-        let isPlaying = true;
-
-        const causes = ["остановка сердца", "инсульт", "болезнь", "несчастный случай", "старость"];
-        const countries = ["Россия", "США", "Индия", "Китай", "Бразилия", "Нигерия", "Германия", "Япония"];
-        
-        function newLife() {
-            const names = ["Алекс", "Мария", "Джон", "Айгуль", "Ли", "Иван", "София", "Ахмед"];
-            life = {
-                name: names[Math.floor(Math.random() * names.length)],
-                country: countries[Math.floor(Math.random() * countries.length)], 
-                age: 0, health: 80, happiness: 60, knowledge: 10, relations: 60,
-                income: 0, focus: "Баланс", alive: true,
-                isWorking: false, log: [], pendingChoice: null, options: []
-            };
-            
-            stopTimer();
-            document.getElementById('btn-new').style.display = 'none';
-            document.getElementById('controls').style.display = 'block';
-            document.getElementById('choices-block').style.display = 'none';
-            
-            life.log.push(`👶 Родился(-ась) в стране: ${life.country} (0 лет).`);
-            updateUI();
-            
-            // Запускаем время автоматически
-            isPlaying = true;
-            updatePlayPauseBtn();
-            startTimer();
-        }
-
-        // --- ЛОГИКА ТАЙМЕРА И СКОРОСТИ ---
-        function startTimer() {
-            stopTimer();
-            if (!isPlaying || !life.alive || life.pendingChoice) return;
-            
-            gameInterval = setInterval(() => {
-                if (life.alive && !life.pendingChoice && isPlaying) {
-                    stepYear();
-                } else {
-                    stopTimer();
-                }
-            }, currentSpeed); 
-        }
-
-        function stopTimer() {
-            if (gameInterval) {
-                clearInterval(gameInterval);
-                gameInterval = null;
-            }
-        }
-
-        function togglePlay() {
-            isPlaying = !isPlaying;
-            updatePlayPauseBtn();
-            if (isPlaying) {
-                startTimer();
-            } else {
-                stopTimer();
-            }
-        }
-
-        function updatePlayPauseBtn() {
-            const btn = document.getElementById('btn-play');
-            if (isPlaying) {
-                btn.innerText = "⏸️ Пауза";
-                btn.style.background = "#dc3545";
-            } else {
-                btn.innerText = "▶️ Играть";
-                btn.style.background = "#28a745";
-            }
-        }
-
-        function setSpeed(ms) {
-            currentSpeed = ms;
-            // Подсвечиваем активную кнопку скорости (убираем прозрачность)
-            ['btn-spd1', 'btn-spd5', 'btn-spd20'].forEach(id => {
-                document.getElementById(id).style.opacity = '0.5';
-            });
-            if (ms === 2000) document.getElementById('btn-spd1').style.opacity = '1';
-            if (ms === 400) document.getElementById('btn-spd5').style.opacity = '1';
-            if (ms === 100) document.getElementById('btn-spd20').style.opacity = '1';
-            
-            if (isPlaying) startTimer(); // Перезапускаем таймер с новой скоростью
-        }
-
-        function updateUI() {
-            document.getElementById('char-name').innerText = life.name;
-            document.getElementById('char-country').innerText = `${life.country} · ${life.age} лет`;
-            
-            document.getElementById('val-health').innerText = Math.floor(life.health);
-            document.getElementById('bar-health').style.width = `${Math.max(0, life.health)}%`;
-            
-            document.getElementById('val-happiness').innerText = Math.floor(life.happiness);
-            document.getElementById('bar-happiness').style.width = `${Math.max(0, life.happiness)}%`;
-            
-            document.getElementById('val-knowledge').innerText = Math.floor(life.knowledge);
-            document.getElementById('bar-knowledge').style.width = `${Math.max(0, life.knowledge)}%`;
-            
-            document.getElementById('val-relations').innerText = Math.floor(life.relations);
-            document.getElementById('bar-relations').style.width = `${Math.max(0, life.relations)}%`;
-            
-            document.getElementById('val-income').innerText = `${life.income} $/год`;
-            document.getElementById('val-focus').innerText = life.focus;
-            
-            const logHtml = life.log.slice(-15).map(l => `<p>${l}</p>`).join('');
-            document.getElementById('log-container').innerHTML = logHtml;
-            
-            let logBox = document.getElementById('log-container');
-            logBox.scrollTop = logBox.scrollHeight;
-
-            if (life.pendingChoice) {
-                stopTimer();
-                showChoices(life.pendingChoice, life.options);
-            }
-            
-            if (!life.alive) {
-                stopTimer();
-                document.getElementById('controls').style.display = 'none';
-                document.getElementById('choices-block').style.display = 'none';
-                document.getElementById('btn-new').style.display = 'block';
-                document.getElementById('char-country').innerText = `${life.country} · Умер(ла) в ${life.age} лет`;
-            }
-        }
-
-        function changeFocus() {
-            if (!life.alive || life.pendingChoice) return;
-            let f = prompt("Выберите фокус на этот год:\nЗдоровье, Учёба, Отношения, Работа, Баланс");
-            if (f) {
-                f = f.trim();
-                let valid = ["Здоровье", "Учёба", "Отношения", "Работа", "Баланс"];
-                let found = valid.find(v => v.toLowerCase() === f.toLowerCase());
-                if (found) {
-                    life.focus = found;
-                    life.log.push(`🎯 Установлен фокус на: ${found}.`);
-                    updateUI();
-                } else {
-                    alert("Пожалуйста, введите одно из предложенных слов.");
-                }
-            }
-        }
-
-        function stepYear() {
-            if (!life.alive || life.pendingChoice) return;
-            
-            life.age++;
-            let yearEvents = [];
-            
-            if (life.focus === "Здоровье") { life.health += 2; yearEvents.push("Заботился о здоровье."); }
-            if (life.focus === "Учёба" && life.age >= 6 && life.age <= 22) { life.knowledge += 3; yearEvents.push("Усердно учился."); }
-            if (life.focus === "Отношения") { life.relations += 2; yearEvents.push("Уделял время близким."); }
-            if (life.focus === "Работа" && life.isWorking) { yearEvents.push("Усердно работал."); }
-
-            let decay = life.age < 40 ? 0.5 : life.age < 65 ? 1.2 : 2.5;
-            life.health = Math.max(0, Math.min(100, life.health - decay + (Math.random() - 0.5)));
-            
-            if (life.isWorking && life.age >= 16) {
-                life.income = Math.floor(life.income * 1.05 + Math.floor(Math.random() * 500));
-            } else {
-                life.income = 0;
-            }
-
-            if (Math.random() < 0.25) { 
-                let ev = "";
-                let pool = [];
-                if (life.age < 18) pool = ["Нашёл новых друзей", "Заболел простудой", "Сломал руку", "Выиграл в конкурсе", "Купил велосипед"];
-                else if (life.age < 60) pool = ["Получил премию", "Поругался с начальником", "Съездил в отпуск", "Купил новую машину", "Нашёл хобби", "Попал в ДТП"];
-                else pool = ["Вышел на пенсию", "Нянчил внуков", "Читал газеты", "Заболел", "Путешествовал"];
-                
-                ev = pool[Math.floor(Math.random() * pool.length)];
-                
-                if (ev === "Получил премию") { life.income += 1000; life.happiness += 5; }
-                if (ev === "Попал в ДТП") { life.health -= 15; }
-                if (ev === "Заболел") { life.health -= 10; }
-                
-                yearEvents.push(ev);
-            } else {
-                yearEvents.push("Год прошел спокойно.");
-            }
-
-            let deathChance = life.age < 50 ? 0.002 : life.age < 70 ? 0.015 : 0.08;
-            if (Math.random() < deathChance) {
-                life.alive = false;
-                let c = causes[Math.floor(Math.random() * causes.length)];
-                yearEvents.push(`💀 Умер(ла). Причина: ${c}`);
-            }
-            
-            if (life.alive) checkChoices();
-
-            life.log.push(`<b>${life.age} лет:</b> ${yearEvents.join(" ")}`);
-            updateUI();
-        }
-
-        function checkChoices() {
-            life.pendingChoice = null;
-            if (life.age === 6) { life.pendingChoice = "Школа"; life.options = ["Усердно учиться", "Больше играть", "Помогать семье"]; }
-            else if (life.age === 17) { life.pendingChoice = "После школы"; life.options = ["Университет", "Пойти работать", "Колледж"]; }
-            else if (life.age === 22 && !life.isWorking) { life.pendingChoice = "Работа"; life.options = ["Искать хорошую работу", "Начать бизнес"]; }
-            else if (life.age === 30) { life.pendingChoice = "Семья"; life.options = ["Завести детей", "Не заводить детей", "Усыновить"]; }
-        }
-
-        function showChoices(title, opts) {
-            document.getElementById('controls').style.display = 'none';
-            document.getElementById('choices-block').style.display = 'block';
-            document.getElementById('choice-title').innerText = `⚡ Развилка: ${title}`;
-            
-            let html = "";
-            opts.forEach((opt, index) => {
-                html += `<button class="btn btn-choice" onclick="makeChoice(${index})">${opt}</button>`;
-            });
-            document.getElementById('choice-options').innerHTML = html;
-        }
-
-        function makeChoice(idx) {
-            let opt = life.options[idx];
-            life.log.push(`✅ <b>Выбор:</b> ${opt}`);
-            
-            if (opt === "Университет") { life.knowledge += 20; }
-            if (opt === "Пойти работать" || opt === "Искать хорошую работу") { life.isWorking = true; life.income = 3000; life.job = "рабочий"; }
-            if (opt === "Начать бизнес") { life.isWorking = true; life.income = 5000; }
-            if (opt === "Завести детей") { life.happiness += 10; life.children = 1;}
-            
-            life.pendingChoice = null;
-            document.getElementById('controls').style.display = 'block';
-            document.getElementById('choices-block').style.display = 'none';
-            
-            // После выбора продолжаем игру (если не на паузе)
-            updateUI();
-            if (isPlaying) startTimer();
-        }
-
-        // Старт
-        setSpeed(2000); // Устанавливаем начальную скорость
-        newLife();
-    </script>
-</body>
-</html>
+            <button class="
