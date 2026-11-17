@@ -92,4 +92,308 @@
         </div>
 
         <div id="controls">
-            <button class="
+            <button class="btn btn-focus" onclick="changeFocus()">🎯 Сменить фокус</button>
+            
+            <div class="speed-controls">
+                <button class="btn" id="btn-play" onclick="togglePlay()" style="background: #dc3545; flex: 1;">⏸️ Пауза</button>
+                <button class="btn" id="btn-spd1" onclick="setSpeed(2000)" style="background: #28a745; flex: 1;">▶️ x1</button>
+                <button class="btn" id="btn-spd5" onclick="setSpeed(400)" style="background: #007bff; flex: 1;">⏩ x5</button>
+                <button class="btn" id="btn-spd20" onclick="setSpeed(100)" style="background: #6f42c1; flex: 1;">⏭️ x20</button>
+            </div>
+        </div>
+        
+        <button class="btn" id="btn-new" style="display:none; background:#17a2b8; margin-top: 15px;" onclick="newLife()">🔄 Новая жизнь</button>
+
+        <div class="log" id="log-container"></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor('#1a1a1a');
+        
+        let life = {};
+        let gameInterval = null; 
+        let currentSpeed = 2000; 
+        let isPlaying = true;
+
+        const causes = ["остановка сердца", "инсульт", "болезнь", "несчастный случай", "старость"];
+        const countries = [
+            {name: "Россия", gdp: 32000}, {name: "США", gdp: 76000}, 
+            {name: "Индия", gdp: 8500}, {name: "Китай", gdp: 23000}, 
+            {name: "Бразилия", gdp: 18000}, {name: "Нигерия", gdp: 5500}, 
+            {name: "Германия", gdp: 55000}, {name: "Япония", gdp: 45000}
+        ];
+        
+        function newLife() {
+            const names = ["Алекс", "Мария", "Джон", "Айгуль", "Ли", "Иван", "София", "Ахмед"];
+            const countryData = countries[Math.floor(Math.random() * countries.length)];
+            
+            life = {
+                name: names[Math.floor(Math.random() * names.length)],
+                country: countryData.name,
+                gdp: countryData.gdp,
+                age: 0, health: 80, happiness: 60, knowledge: 10, relations: 60,
+                income: 0, money: 0, debt: 0,
+                partner: false, partnerName: "", children: 0, grandchildren: 0,
+                education: "нет", job: "нет",
+                focus: "Баланс", alive: true,
+                log: [], pendingChoice: null, options: []
+            };
+            
+            stopTimer();
+            document.getElementById('btn-new').style.display = 'none';
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('choices-block').style.display = 'none';
+            
+            life.log.push(`👶 Родился(-ась) в стране: ${life.country} (0 лет).`);
+            updateUI();
+            
+            isPlaying = true;
+            updatePlayPauseBtn();
+            startTimer();
+        }
+
+        function startTimer() {
+            stopTimer();
+            if (!isPlaying || !life.alive || life.pendingChoice) return;
+            gameInterval = setInterval(() => {
+                if (life.alive && !life.pendingChoice && isPlaying) {
+                    stepYear();
+                } else {
+                    stopTimer();
+                }
+            }, currentSpeed); 
+        }
+
+        function stopTimer() {
+            if (gameInterval) {
+                clearInterval(gameInterval);
+                gameInterval = null;
+            }
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            updatePlayPauseBtn();
+            if (isPlaying) { startTimer(); } else { stopTimer(); }
+        }
+
+        function updatePlayPauseBtn() {
+            const btn = document.getElementById('btn-play');
+            if (isPlaying) {
+                btn.innerText = "⏸️ Пауза"; btn.style.background = "#dc3545";
+            } else {
+                btn.innerText = "▶️ Играть"; btn.style.background = "#28a745";
+            }
+        }
+
+        function setSpeed(ms) {
+            currentSpeed = ms;
+            ['btn-spd1', 'btn-spd5', 'btn-spd20'].forEach(id => {
+                document.getElementById(id).style.opacity = '0.5';
+            });
+            if (ms === 2000) document.getElementById('btn-spd1').style.opacity = '1';
+            if (ms === 400) document.getElementById('btn-spd5').style.opacity = '1';
+            if (ms === 100) document.getElementById('btn-spd20').style.opacity = '1';
+            if (isPlaying) startTimer();
+        }
+
+        function updateUI() {
+            document.getElementById('char-name').innerText = life.name;
+            document.getElementById('char-country').innerText = `${life.country} · ${life.age} лет`;
+            
+            document.getElementById('val-health').innerText = Math.floor(life.health);
+            document.getElementById('bar-health').style.width = `${Math.max(0, life.health)}%`;
+            document.getElementById('val-happiness').innerText = Math.floor(life.happiness);
+            document.getElementById('bar-happiness').style.width = `${Math.max(0, life.happiness)}%`;
+            document.getElementById('val-knowledge').innerText = Math.floor(life.knowledge);
+            document.getElementById('bar-knowledge').style.width = `${Math.max(0, life.knowledge)}%`;
+            document.getElementById('val-relations').innerText = Math.floor(life.relations);
+            document.getElementById('bar-relations').style.width = `${Math.max(0, life.relations)}%`;
+            
+            document.getElementById('val-income').innerText = `${life.income} $/год`;
+            document.getElementById('val-money').innerText = `${life.money} $`;
+            
+            if (life.debt > 0) {
+                document.getElementById('debt-row').style.display = 'flex';
+                document.getElementById('val-debt').innerText = `${life.debt} $`;
+            } else {
+                document.getElementById('debt-row').style.display = 'none';
+            }
+            
+            document.getElementById('val-focus').innerText = life.focus;
+            
+            let famHtml = "";
+            if (life.partner) famHtml += `💍 В браке с ${life.partnerName}<br>`;
+            if (life.children > 0) famHtml += `👶 Дети: ${life.children}<br>`;
+            if (life.grandchildren > 0) famHtml += `👴 Внуки: ${life.grandchildren}<br>`;
+            
+            if (famHtml !== "") {
+                document.getElementById('family-block').style.display = 'block';
+                document.getElementById('family-block').innerHTML = famHtml;
+            } else {
+                document.getElementById('family-block').style.display = 'none';
+            }
+            
+            const logHtml = life.log.slice(-15).map(l => `<p>${l}</p>`).join('');
+            document.getElementById('log-container').innerHTML = logHtml;
+            let logBox = document.getElementById('log-container');
+            logBox.scrollTop = logBox.scrollHeight;
+
+            if (life.pendingChoice) {
+                stopTimer();
+                showChoices(life.pendingChoice, life.options);
+            }
+            
+            if (!life.alive) {
+                stopTimer();
+                document.getElementById('controls').style.display = 'none';
+                document.getElementById('choices-block').style.display = 'none';
+                document.getElementById('btn-new').style.display = 'block';
+                document.getElementById('char-country').innerText = `${life.country} · Умер(ла) в ${life.age} лет`;
+            }
+        }
+
+        function changeFocus() {
+            if (!life.alive || life.pendingChoice) return;
+            let f = prompt("Выберите фокус на этот год:\nЗдоровье, Учёба, Отношения, Работа, Баланс");
+            if (f) {
+                f = f.trim();
+                let valid = ["Здоровье", "Учёба", "Отношения", "Работа", "Баланс"];
+                let found = valid.find(v => v.toLowerCase() === f.toLowerCase());
+                if (found) {
+                    life.focus = found;
+                    life.log.push(`🎯 Установлен фокус на: ${found}.`);
+                    updateUI();
+                } else {
+                    alert("Пожалуйста, введите одно из предложенных слов.");
+                }
+            }
+        }
+
+        function stepYear() {
+            if (!life.alive || life.pendingChoice) return;
+            
+            life.age++;
+            let yearEvents = [];
+            
+            if (life.focus === "Здоровье") { life.health += 2; yearEvents.push("Заботился о здоровье."); }
+            if (life.focus === "Учёба" && life.age >= 6 && life.age <= 22) { life.knowledge += 3; yearEvents.push("Усердно учился."); }
+            if (life.focus === "Отношения") { life.relations += 2; yearEvents.push("Уделял время близким."); }
+
+            let decay = life.age < 40 ? 0.5 : life.age < 65 ? 1.2 : 2.5;
+            life.health = Math.max(0, Math.min(100, life.health - decay + (Math.random() - 0.5)));
+            
+            if (life.job !== "нет" && life.age >= 16) {
+                let base = life.gdp * 0.1;
+                let eduMult = life.education === "высшее" ? 1.5 : 1.0;
+                life.income = Math.floor(base * eduMult + Math.random() * 500);
+                life.money += life.income;
+                
+                let expenses = Math.floor(life.gdp * 0.05);
+                if (life.children > 0) expenses += 500 * life.children;
+                if (life.partner) expenses += 300;
+                life.money -= expenses;
+                
+                if (life.debt > 0) {
+                    let pay = Math.floor(life.debt * 0.1);
+                    if (life.money >= pay) { life.money -= pay; life.debt -= pay; }
+                    else { life.debt = Math.floor(life.debt * 1.05); life.happiness -= 5; }
+                }
+                
+                if (life.money < 0) {
+                    life.debt += Math.abs(life.money); life.money = 0;
+                    life.health -= 5; life.happiness -= 10;
+                    yearEvents.push("Жизнь в долг.");
+                }
+            } else {
+                life.income = 0;
+            }
+
+            if (Math.random() < 0.2) { 
+                let ev = "Спокойный год.";
+                let pool = [];
+                if (life.age < 18) pool = ["Нашёл друзей", "Заболел", "Сломал руку", "Выиграл конкурс"];
+                else if (life.age < 60) pool = ["Получил премию", "Поругался с боссом", "Съездил в отпуск", "Попал в ДТП", "Купил машину"];
+                else pool = ["Вышел на пенсию", "Заболел", "Нянчил внуков", "Путешествовал"];
+                
+                ev = pool[Math.floor(Math.random() * pool.length)];
+                if (ev === "Получил премию") { life.money += 1000; life.happiness += 5; }
+                if (ev === "Попал в ДТП") { life.health -= 15; life.money -= 500; }
+                if (ev === "Заболел") { life.health -= 10; life.money -= 300; }
+                yearEvents.push(ev);
+            }
+
+            let deathChance = life.age < 50 ? 0.002 : life.age < 70 ? 0.015 : 0.08;
+            if (Math.random() < deathChance) {
+                life.alive = false;
+                let c = causes[Math.floor(Math.random() * causes.length)];
+                yearEvents.push(`💀 Умер(ла). Причина: ${c}`);
+            }
+            
+            if (life.alive) checkChoices();
+
+            life.log.push(`<b>${life.age} лет:</b> ${yearEvents.join(" ")}`);
+            updateUI();
+        }
+
+        function checkChoices() {
+            life.pendingChoice = null;
+            let marriageAge = life.gdp < 10000 ? 18 : life.gdp < 30000 ? 22 : 26;
+            
+            if (life.age === 6) { life.pendingChoice = "Школа"; life.options = ["Усердно учиться", "Больше играть", "Помогать семье"]; }
+            else if (life.age === 17) { life.pendingChoice = "После школы"; life.options = ["Университет", "Пойти работать", "Колледж"]; }
+            else if (life.age === 22 && life.job === "нет") { life.pendingChoice = "Работа"; life.options = ["Искать хорошую работу", "Начать бизнес"]; }
+            else if (life.age === marriageAge && !life.partner) { life.pendingChoice = "Брак"; life.options = ["Жениться/Выйти замуж", "Остаться одному"]; }
+            else if (life.age === 30) { life.pendingChoice = "Семья"; life.options = ["Завести детей", "Не заводить детей"]; }
+        }
+
+        function showChoices(title, opts) {
+            document.getElementById('controls').style.display = 'none';
+            document.getElementById('choices-block').style.display = 'block';
+            document.getElementById('choice-title').innerText = `⚡ Развилка: ${title}`;
+            
+            let html = "";
+            opts.forEach((opt, index) => {
+                html += `<button class="btn btn-choice" onclick="makeChoice(${index})">${opt}</button>`;
+            });
+            document.getElementById('choice-options').innerHTML = html;
+        }
+
+        function makeChoice(idx) {
+            let opt = life.options[idx];
+            life.log.push(`✅ <b>Выбор:</b> ${opt}`);
+            
+            if (opt === "Университет") { life.education = "высшее"; life.knowledge += 20; life.debt += 5000;}
+            if (opt === "Пойти работать" || opt === "Искать хорошую работу") { life.job = "рабочий"; }
+            if (opt === "Начать бизнес") { life.job = "предприниматель"; life.debt += 10000; }
+            
+            if (opt === "Жениться/Выйти замуж") {
+                life.partner = true;
+                let names = ["Анна", "Елена", "Дмитрий", "Александр", "Мария", "Сергей"];
+                life.partnerName = names[Math.floor(Math.random() * names.length)];
+                life.happiness += 20;
+            }
+            
+            if (opt === "Завести детей") { life.children += Math.floor(Math.random() * 3) + 1; life.happiness += 10; }
+            
+            if (life.age >= 50 && life.children > 0 && life.grandchildren === 0) {
+                life.grandchildren = Math.floor(Math.random() * 3) + 1;
+                life.happiness += 15;
+                life.log.push(`👴 Родились внуки! (${life.grandchildren} чел.)`);
+            }
+            
+            life.pendingChoice = null;
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('choices-block').style.display = 'none';
+            
+            updateUI();
+            if (isPlaying) startTimer();
+        }
+
+        setSpeed(2000); 
+        newLife();
+    </script>
+</body>
+</html>
